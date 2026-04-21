@@ -38,7 +38,7 @@ export interface AdTriggerPoint {
 
 // 用户行为记录
 export interface UserAction {
-  type: 'drag_start' | 'drag_end' | 'drop_success' | 'drop_reject' | 'video_pause' | 'video_resume'
+  type: 'drag_start' | 'drag_end' | 'drop_success' | 'drop_reject' | 'video_pause' | 'video_resume' | 'feed_from_split'
   productId?: string
   timestamp: number
   details?: Record<string, unknown>

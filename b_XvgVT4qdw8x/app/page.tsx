@@ -18,6 +18,10 @@ export default function InteractiveAdPage() {
   const [showPauseOverlay, setShowPauseOverlay] = useState(false)
   // 新增状态：是否显示可拖拽的卡片
   const [showDraggableCard, setShowDraggableCard] = useState(false)
+  // 视频进度（0-100）
+  const [videoProgress, setVideoProgress] = useState(0)
+  // 分屏面板
+  const [showSplitPanel, setShowSplitPanel] = useState(false)
 
   // 视频暂停时调用
   const handlePause = () => {
@@ -29,6 +33,11 @@ export default function InteractiveAdPage() {
     setShowPauseOverlay(false)
     setShowDraggableCard(false)
   }
+
+  // 视频进度更新回调
+  const handleVideoTimeUpdate = useCallback((currentTime: number, duration: number) => {
+    setVideoProgress((currentTime / duration) * 100)
+  }, [])
  
   const {
     backpack,
@@ -49,6 +58,51 @@ export default function InteractiveAdPage() {
   const [floatingPos, setFloatingPos] = useState({ x: 0, y: 0 })
   const characterRef = useRef<HTMLDivElement>(null)
 
+  // 开始浮动拖拽（点击热点时调用）
+  const startFloatingDrag = useCallback((product: Product, startX: number, startY: number) => {
+    setFloatingProduct(product)
+    setFloatingPos({ x: startX, y: startY })
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setFloatingPos({ x: e.clientX, y: e.clientY })
+    }
+
+    const handleMouseUp = (e: MouseEvent) => {
+      // 判断是否在小人身上
+      const characterEl = characterRef.current
+      let droppedOnCharacter = false
+      if (characterEl) {
+        const rect = characterEl.getBoundingClientRect()
+        droppedOnCharacter = e.clientX >= rect.left && e.clientX <= rect.right &&
+                             e.clientY >= rect.top && e.clientY <= rect.bottom
+      }
+      if (droppedOnCharacter) {
+        // 添加到背包
+        const success = addItem(product)
+        if (success) {
+          setCharacterEmotion('happy')
+          setReceivedProduct(product)
+          logAction({ type: 'drop_success', productId: product.id })
+          setTimeout(() => setReceivedProduct(null), 2000)
+        } else {
+          setCharacterEmotion('surprised')
+          logAction({
+            type: 'drop_reject',
+            productId: product.id,
+            details: { reason: 'backpack_full' },
+          })
+        }
+      }
+      // 清除浮动商品
+      setFloatingProduct(null)
+      // 移除全局事件
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }, [addItem, logAction])
 
   // 广告触发时的处理
   const handleAdTriggered = useCallback((products: Product[]) => {
@@ -56,7 +110,14 @@ export default function InteractiveAdPage() {
     setCurrentProducts(products)
     setCharacterEmotion('expectant')
     logAction({ type: 'video_pause' })
-  }, [logAction])
+    
+    // 自动启动浮动拖拽：取第一个商品，从屏幕中心开始
+    if (products.length > 0) {
+      setTimeout(() => {
+        startFloatingDrag(products[0], window.innerWidth / 2, window.innerHeight / 2)
+      }, 300)
+    }
+  }, [logAction, startFloatingDrag])
 
   // 广告结束时的处理
   const handleAdEnded = useCallback(() => {
@@ -152,52 +213,6 @@ export default function InteractiveAdPage() {
     setCharacterEmotion('expectant')
   }, [])
 
-  // 开始浮动拖拽（点击热点时调用）
-  const startFloatingDrag = useCallback((product: Product, startX: number, startY: number) => {
-    setFloatingProduct(product)
-    setFloatingPos({ x: startX, y: startY })
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setFloatingPos({ x: e.clientX, y: e.clientY })
-    }
-
-    const handleMouseUp = (e: MouseEvent) => {
-      // 判断是否在小人身上
-      const characterEl = characterRef.current
-      let droppedOnCharacter = false
-      if (characterEl) {
-        const rect = characterEl.getBoundingClientRect()
-        droppedOnCharacter = e.clientX >= rect.left && e.clientX <= rect.right &&
-                             e.clientY >= rect.top && e.clientY <= rect.bottom
-      }
-      if (droppedOnCharacter) {
-        // 添加到背包
-        const success = addItem(product)
-        if (success) {
-          setCharacterEmotion('happy')
-          setReceivedProduct(product)
-          logAction({ type: 'drop_success', productId: product.id })
-          setTimeout(() => setReceivedProduct(null), 2000)
-        } else {
-          setCharacterEmotion('surprised')
-          logAction({
-            type: 'drop_reject',
-            productId: product.id,
-            details: { reason: 'backpack_full' },
-          })
-        }
-      }
-      // 清除浮动商品
-      setFloatingProduct(null)
-      // 移除全局事件
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-  }, [addItem, logAction, setCharacterEmotion, setReceivedProduct])
-
   return (
     <main className="relative min-h-screen overflow-hidden bg-background">
       {/* 顶部导航栏 */}
@@ -234,6 +249,7 @@ export default function InteractiveAdPage() {
             onAdEnded={handleAdEnded}
             onPause={handlePause}
             onPlay={handlePlay}
+            onTimeUpdate={handleVideoTimeUpdate}
             isAdActive={isAdActive}
             className="h-[50vh] w-full lg:h-screen"
           />
@@ -265,7 +281,11 @@ export default function InteractiveAdPage() {
                     id: 'perfume',
                     name: '香水',
                     image: '/products/perfume.png',
-                    price: 299,
+                    brand: 'dior',
+                    category: 'luxury',
+                    description: '迪奥香水',
+                    rarity: 'rare',
+                    points: 50,
                   }, clientX, clientY)
                 }}
                 className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-yellow-400 rounded-full animate-pulse z-30 shadow-lg"
@@ -297,12 +317,17 @@ export default function InteractiveAdPage() {
         <div className="relative flex flex-1 flex-col items-center justify-center bg-gradient-to-b from-background to-secondary/30 p-6 lg:w-1/3">
           {/* 小人角色 */}
           <div className="relative mb-8">
-            <Character
-              ref={characterRef}
-              emotion={characterEmotion}
-              isReceiving={isDraggingProduct}
-              receivedProduct={receivedProduct}
-            />
+            <div
+              onDoubleClick={() => setShowSplitPanel(true)}
+              className="cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <Character
+                ref={characterRef}
+                emotion={characterEmotion}
+                isReceiving={isDraggingProduct}
+                receivedProduct={receivedProduct}
+              />
+            </div>
 
             {/* 拖拽提示 */}
             <AnimatePresence>
@@ -397,7 +422,149 @@ export default function InteractiveAdPage() {
           </div>
         </div>
       )}
+
+      {/* 分屏面板：左右双屏界面 */}
+      {showSplitPanel && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowSplitPanel(false)
+            }
+          }}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="w-full max-w-5xl bg-card rounded-2xl overflow-hidden flex"
+          >
+            {/* 左侧：背包 */}
+            <div className="w-1/2 border-r border-border/50 overflow-auto max-h-[80vh]">
+              <div className="p-6">
+                <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                  <span>🎒</span> 我的背包
+                </h3>
+                {backpack.items.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="mb-2">暂无商品</p>
+                    <p className="text-sm">拖拽商品到小人身上即可添加</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {backpack.items.map((item) => (
+                      <div
+                        key={item.product.id}
+                        className="flex items-center justify-between bg-secondary/50 p-3 rounded-lg hover:bg-secondary transition-colors"
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <img
+                            src={item.product.image}
+                            alt={item.product.name}
+                            className="w-12 h-12 object-contain rounded"
+                          />
+                          <div className="flex-1">
+                            <p className="font-medium">{item.product.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              ×{item.quantity}
+                            </p>
+                          </div>
+                        </div>
+                        {/* 商品链接 - 可根据实际需求改为真实链接 */}
+                        <a
+                          href={`https://example.com/product/${item.product.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs px-3 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+                        >
+                          购买
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {backpack.items.length > 0 && (
+                  <div className="mt-6 pt-4 border-t border-border/50">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">总积分：</span>
+                      <span className="text-xl font-bold text-primary">
+                        {totalPoints}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 右侧：投喂商品 */}
+            <div className="w-1/2 overflow-auto max-h-[80vh] flex flex-col">
+              <div className="p-6 flex-1 overflow-auto">
+                <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                  <span>🍬</span> 投喂商品
+                </h3>
+                {currentProducts.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>暂无商品</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {currentProducts.map((product) => (
+                      <motion.button
+                        key={product.id}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          const success = addItem(product)
+                          if (success) {
+                            setCharacterEmotion('happy')
+                            setReceivedProduct(product)
+                            logAction({
+                              type: 'feed_from_split',
+                              productId: product.id,
+                            })
+                            setTimeout(() => {
+                              setReceivedProduct(null)
+                            }, 1500)
+                          } else {
+                            setCharacterEmotion('surprised')
+                          }
+                        }}
+                        className="bg-secondary/50 hover:bg-secondary p-3 rounded-xl flex flex-col items-center gap-2 transition-colors"
+                      >
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          className="w-16 h-16 object-contain"
+                        />
+                        <span className="text-sm font-medium text-center">
+                          {product.name}
+                        </span>
+                      </motion.button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 关闭按钮 */}
+              <div className="p-4 border-t border-border/50">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowSplitPanel(false)}
+                  className="w-full py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors"
+                >
+                  关闭 (双击小人再打开)
+                </motion.button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
       
     </main>
   )
 }
+

@@ -17,6 +17,7 @@ interface VideoPlayerProps {
   className?: string
   onPause?: () => void
   onPlay?: () => void
+  onTimeUpdate?: (currentTime: number, duration: number) => void
 }
 
 export function VideoPlayer({
@@ -28,6 +29,7 @@ export function VideoPlayer({
   className,
   onPause,
   onPlay,
+  onTimeUpdate,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -99,8 +101,9 @@ export function VideoPlayer({
   const handleTimeUpdate = useCallback(() => {
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime)
+      onTimeUpdate?.(videoRef.current.currentTime, videoRef.current.duration || 0)
     }
-  }, [])
+  }, [onTimeUpdate])
 
   // 加载元数据
   const handleLoadedMetadata = useCallback(() => {

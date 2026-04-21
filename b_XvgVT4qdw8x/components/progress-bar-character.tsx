@@ -19,21 +19,33 @@ export function ProgressBarCharacter({
 }: ProgressBarCharacterProps) {
   const [isBeingDragged, setIsBeingDragged] = useState(false)
   const [isThrown, setIsThrown] = useState(false)
-  const [throwPosition, setThrowPosition] = useState({ x: 0, y: 0 })
   const controls = useAnimation()
-  const containerRef = useRef<HTMLDivElement>(null)
 
   // 小人回到进度条上
   const returnToBar = () => {
     setIsThrown(false)
-    setThrowPosition({ x: 0, y: 0 })
-    controls.start({
+    
+    // 关键修复：强制停止所有当前动画，并立即重置位置
+    // 使用 set 而不是 start 来避免额外的过渡动画导致的位置不同步
+    controls.stop()
+    controls.set({
       x: 0,
       y: 0,
       rotate: 0,
       scale: 1,
-      transition: { type: 'spring', stiffness: 300, damping: 20 },
     })
+    
+    // 如果正在播放，重新启动摆动动画
+    if (isPlaying) {
+      controls.start({
+        rotate: [0, -3, 3, -3, 0],
+        transition: {
+          duration: 2,
+          repeat: Infinity,
+          ease: 'easeInOut',
+        },
+      })
+    }
   }
 
   // 拖拽开始
@@ -76,17 +88,21 @@ export function ProgressBarCharacter({
       setTimeout(returnToBar, 3000)
     } else {
       // 速度不够，弹回去
-      controls.start({
-        x: 0,
-        y: 0,
-        rotate: 0,
-        transition: { type: 'spring', stiffness: 400, damping: 25 },
+      // 修复：使用 requestAnimationFrame 确保在下一帧执行，避免挂载警告
+      requestAnimationFrame(() => {
+        controls.start({
+          x: 0,
+          y: 0,
+          rotate: 0,
+          transition: { type: 'spring', stiffness: 400, damping: 25 },
+        })
       })
     }
   }
 
   // 播放时的摆动动画
   useEffect(() => {
+    // 只有在没有被拖拽、没有被扔出去、且正在播放时才执行摆动
     if (isPlaying && !isBeingDragged && !isThrown) {
       controls.start({
         rotate: [0, -3, 3, -3, 0],
@@ -97,24 +113,28 @@ export function ProgressBarCharacter({
         },
       })
     } else if (!isPlaying && !isBeingDragged && !isThrown) {
+      // 停止播放且未交互时，重置旋转
       controls.stop()
       controls.set({ rotate: 0 })
     }
+    // 注意：这里不依赖 progress，因为 progress 变化只影响父容器的 left，不影响小人的相对动画
   }, [isPlaying, isBeingDragged, isThrown, controls])
 
   return (
     <div
-      ref={containerRef}
       className={cn('absolute bottom-0 h-16 pointer-events-none', className)}
       style={{
         left: `${progress}%`,
         transform: 'translateX(-50%)',
         zIndex: 50,
+        // 关键修复：确保父容器没有 transition，以便即时响应 progress 变化
+        transition: 'none', 
       }}
     >
       <motion.div
-        drag
+        drag={!isThrown} // 被扔出去后禁止拖拽，直到回归
         dragMomentum={false}
+        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }} // 限制在原地附近拖拽，实际位移由 animate 控制
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         animate={controls}

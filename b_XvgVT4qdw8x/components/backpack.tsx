@@ -183,14 +183,25 @@ export function BackpackPanel({
                         </div>
                       </div>
 
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onRemoveItem(item.product.id)}
-                        className="h-8 w-8 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* 购买链接 */}
+                        <a
+                          href={`https://example.com/product/${item.product.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs px-2 py-1 bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors whitespace-nowrap"
+                        >
+                          购买
+                        </a>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onRemoveItem(item.product.id)}
+                          className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
